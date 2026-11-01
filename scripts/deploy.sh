@@ -18,4 +18,4 @@ git push -q -f origin HEAD:gh-pages
 cd "$OLDPWD"
 git worktree remove --force "$tmp"
 git branch -D gh-pages-new >/dev/null 2>&1 || true
-echo "Published to https://danielseiler8794.github.io/Habit-Tacker/"
+echo "Published to https://danielseiler8794.github.io/Habit-Tracker/"
