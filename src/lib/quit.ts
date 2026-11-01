@@ -16,20 +16,24 @@ export interface Savings {
   timeValue: number
   /** Productive hours the saved time equals at the habit's factor */
   productiveHours: number
+  /** Calories not eaten or drunk */
+  kcal: number
 }
 
-export const emptySavings = (): Savings => ({ money: 0, minutes: 0, timeValue: 0, productiveHours: 0 })
+export const emptySavings = (): Savings => ({ money: 0, minutes: 0, timeValue: 0, productiveHours: 0, kcal: 0 })
 export const totalEuro = (s: Savings) => s.money + s.timeValue
 
-export const savesMoney = (h: Habit) => h.saveMode === 'money' || h.saveMode === 'both'
-export const savesTime = (h: Habit) => h.saveMode === 'time' || h.saveMode === 'both'
+export const savesMoney = (h: Habit) => !!h.saves?.includes('money')
+export const savesTime = (h: Habit) => !!h.saves?.includes('time')
+export const savesKcal = (h: Habit) => !!h.saves?.includes('kcal')
 
 /** What a number of days without the habit saves, at its per-day amounts. */
 export function savingsFor(h: Habit, days: number): Savings {
   const money = savesMoney(h) ? days * (h.costMoney ?? 0) : 0
   const minutes = savesTime(h) ? days * (h.costMinutes ?? 0) : 0
+  const kcal = savesKcal(h) ? days * (h.costKcal ?? 0) : 0
   const hours = minutes / 60
-  return { money, minutes, timeValue: hours * (h.hourValue ?? 0), productiveHours: hours * (h.hourFactor ?? 0) }
+  return { money, minutes, timeValue: hours * (h.hourValue ?? 0), productiveHours: hours * (h.hourFactor ?? 0), kcal }
 }
 
 export const relapseDays = (log: QuitLog | undefined) => new Set((log?.relapses ?? []).map((r) => toKey(new Date(r))))
@@ -110,10 +114,13 @@ export const formatEuro = (n: number) =>
 
 export const formatMinutes = (min: number) => (min < 60 ? `${num(min)} Min` : `${num(min / 60)} Std`)
 
+export const formatKcal = (kcal: number) => `${num(kcal)} kcal`
+
 /** Short line for a card: "Gespart 397 € · 29 Std" */
 export function savingsLine(s: Savings) {
   const parts = []
   if (totalEuro(s) > 0) parts.push(formatEuro(totalEuro(s)))
   if (s.minutes > 0) parts.push(formatMinutes(s.minutes))
+  if (s.kcal > 0) parts.push(formatKcal(s.kcal))
   return parts.length ? `Gespart ${parts.join(' · ')}` : null
 }

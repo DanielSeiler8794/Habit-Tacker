@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { categoryStats } from '../lib/categories'
 import { formatLong, fromKey, greeting, toKey } from '../lib/dates'
 import type { Summary } from '../lib/gamification'
-import { formatEuro, formatMinutes, isQuit, totalEuro } from '../lib/quit'
+import { formatEuro, formatKcal, formatMinutes, isQuit, totalEuro } from '../lib/quit'
 import { isScheduled } from '../lib/stats'
 import type { AppState } from '../lib/types'
 import { CategoryStreaks } from './CategoryStreaks'
@@ -51,8 +51,9 @@ export function TodayView(p: Props) {
 
   const euro = totalEuro(summary.saved)
   const minutes = summary.saved.minutes
-  const savedHeadline = euro > 0 ? formatEuro(euro) : minutes > 0 ? formatMinutes(minutes) : `${summary.cleanDaysTotal} Tage`
-  const savedLabel = euro > 0 || minutes > 0 ? 'Schon gespart' : 'Schon durchgezogen'
+  const kcal = summary.saved.kcal
+  const savedHeadline = euro > 0 ? formatEuro(euro) : minutes > 0 ? formatMinutes(minutes) : kcal > 0 ? formatKcal(kcal) : `${summary.cleanDaysTotal} Tage`
+  const savedLabel = euro > 0 || minutes > 0 || kcal > 0 ? 'Schon gespart' : 'Schon durchgezogen'
   const showRing = planned.length > 0 && quitHabits.length === 0
 
   return (
@@ -85,6 +86,7 @@ export function TodayView(p: Props) {
                   <p className="hero-big">{savedHeadline}</p>
                   <p className="hero-sub">
                     {euro > 0 && minutes > 0 && <>{formatMinutes(minutes)} Zeit · </>}
+                    {(euro > 0 || minutes > 0) && kcal > 0 && <>{formatKcal(kcal)} · </>}
                     {summary.cleanDaysTotal} {summary.cleanDaysTotal === 1 ? 'Tag' : 'Tage'} ohne Rückfall
                   </p>
                 </>

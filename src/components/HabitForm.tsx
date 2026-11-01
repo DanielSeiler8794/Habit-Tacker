@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { CATEGORIES, DEFAULT_CATEGORY } from '../lib/categories'
 import { ALL_DAYS, toKey, WEEK_ORDER, WEEKDAY_SHORT } from '../lib/dates'
 import { notificationsSupported, requestNotifications } from '../lib/reminders'
-import type { Habit, HabitKind, SaveMode } from '../lib/types'
+import type { Habit, HabitKind, SaveKind } from '../lib/types'
 
 const BUILD_EMOJIS = ['💧', '📚', '🏃', '🧘', '🌙', '🥗', '💪', '🚴', '✍️', '🎸', '🧠', '💊', '🛏️', '☀️', '🍎', '🧹', '💰', '🌿', '🎯', '🫁', '🐕', '❤️', '🦷', '🚶']
 const QUIT_EMOJIS = ['🚬', '🍺', '🍷', '🍫', '🍟', '🥤', '☕', '📱', '🎮', '📺', '🛒', '🎰', '💸', '😤', '💅', '⏰', '🍬', '🍕', '🌭', '🛋️', '🧃', '🥃', '🍔', '💬']
@@ -29,7 +29,10 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
   const [since, setSince] = useState(localInput(habit?.quitSince ? new Date(habit.quitSince) : new Date()))
   const [money, setMoney] = useState(habit?.costMoney ? String(habit.costMoney) : '')
   const [minutes, setMinutes] = useState(habit?.costMinutes ? String(habit.costMinutes) : '')
-  const [saveMode, setSaveMode] = useState<SaveMode>(habit?.saveMode ?? 'money')
+  const [saves, setSaves] = useState<SaveKind[]>(habit?.saves ?? ['money'])
+  const [kcal, setKcal] = useState(habit?.costKcal ? String(habit.costKcal) : '')
+  const has = (k: SaveKind) => saves.includes(k)
+  const toggleSave = (k: SaveKind) => setSaves((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]))
   const [hourValue, setHourValue] = useState(habit?.hourValue ? String(habit.hourValue) : '')
   const [hourFactor, setHourFactor] = useState(habit?.hourFactor ? String(habit.hourFactor) : '')
   const [factorLabel, setFactorLabel] = useState(habit?.factorLabel ?? '')
@@ -71,12 +74,14 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
                 reminder: null,
                 createdAt: toKey(sinceDate),
                 quitSince: sinceDate.toISOString(),
-                saveMode,
-                costMoney: saveMode !== 'time' ? num(money) : undefined,
-                costMinutes: saveMode !== 'money' ? num(minutes) : undefined,
-                hourValue: saveMode !== 'money' ? num(hourValue) : undefined,
-                hourFactor: saveMode !== 'money' ? num(hourFactor) : undefined,
-                factorLabel: saveMode !== 'money' && num(hourFactor) ? factorLabel.trim() || undefined : undefined,
+                saves,
+                saveMode: undefined,
+                costMoney: has('money') ? num(money) : undefined,
+                costMinutes: has('time') ? num(minutes) : undefined,
+                costKcal: has('kcal') ? num(kcal) : undefined,
+                hourValue: has('time') ? num(hourValue) : undefined,
+                hourFactor: has('time') ? num(hourFactor) : undefined,
+                factorLabel: has('time') && num(hourFactor) ? factorLabel.trim() || undefined : undefined,
               }
             : { ...base, days: [...effectiveDays].sort(), reminder: reminderOn ? time : null, createdAt: habit?.createdAt ?? toKey(new Date()) },
         )
@@ -141,32 +146,43 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
           </fieldset>
           <fieldset className="field">
             <legend>Was sparst du pro Tag ohne Rückfall?</legend>
-            <div className="segmented three" role="radiogroup" aria-label="Was sparst du">
-              {(['money', 'time', 'both'] as const).map((m) => (
-                <button type="button" role="radio" aria-checked={saveMode === m} key={m} className={saveMode === m ? 'is-active' : ''} onClick={() => setSaveMode(m)}>
-                  {saveMode === m && <motion.span layoutId="seg-save" className="seg-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
-                  <span>{m === 'money' ? 'Geld' : m === 'time' ? 'Zeit' : 'Beides'}</span>
+            <div className="chips" role="group" aria-label="Was sparst du">
+              {(
+                [
+                  ['money', 'Geld'],
+                  ['time', 'Zeit'],
+                  ['kcal', 'Kalorien'],
+                ] as const
+              ).map(([k, label]) => (
+                <button type="button" key={k} className={has(k) ? 'is-active' : ''} onClick={() => toggleSave(k)} aria-pressed={has(k)}>
+                  {label}
                 </button>
               ))}
             </div>
             <div className="cost-row">
-              {saveMode !== 'time' && (
+              {has('money') && (
                 <label className="cost">
                   <input id="cost-money" className="input" inputMode="decimal" value={money} onChange={(e) => setMoney(e.target.value)} placeholder="0" aria-label="Euro pro Tag" />
                   <span>€ / Tag</span>
                 </label>
               )}
-              {saveMode !== 'money' && (
+              {has('time') && (
                 <label className="cost">
                   <input id="cost-minutes" className="input" inputMode="numeric" value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="0" aria-label="Minuten pro Tag" />
                   <span>Min. / Tag</span>
                 </label>
               )}
+              {has('kcal') && (
+                <label className="cost">
+                  <input id="cost-kcal" className="input" inputMode="numeric" value={kcal} onChange={(e) => setKcal(e.target.value)} placeholder="0" aria-label="Kalorien pro Tag" />
+                  <span>kcal / Tag</span>
+                </label>
+              )}
             </div>
-            <p className="hint">Zum Beispiel beim Rauchen: 9 € für die Schachtel und 40 Minuten Rauchpausen. Jeder Tag ohne Rückfall wird automatisch gutgeschrieben.</p>
+            <p className="hint">Wähle alles, was zutrifft. Zum Beispiel bei Süssigkeiten: 2 € und 400 kcal pro Tag. Jeder Tag ohne Rückfall wird automatisch gutgeschrieben.</p>
           </fieldset>
 
-          {saveMode !== 'money' && (
+          {has('time') && (
             <fieldset className="field">
               <legend>Was ist dir eine gesparte Stunde wert? (optional)</legend>
               <label className="cost">

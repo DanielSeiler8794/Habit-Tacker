@@ -1,6 +1,9 @@
 export type HabitKind = 'build' | 'quit'
 
-/** What giving up a bad habit saves */
+/** What giving up a bad habit saves; any combination */
+export type SaveKind = 'money' | 'time' | 'kcal'
+
+/** Before version 7: one of three fixed choices */
 export type SaveMode = 'money' | 'time' | 'both'
 
 export interface Habit {
@@ -20,11 +23,15 @@ export interface Habit {
   /** Quit habits: ISO timestamp the clean time is counted from */
   quitSince?: string
   /** Quit habits: what is saved, and what one day without the habit saves */
+  saves?: SaveKind[]
+  /** Replaced by saves in version 7 */
   saveMode?: SaveMode
   /** Euro per day */
   costMoney?: number
   /** Minutes per day */
   costMinutes?: number
+  /** Calories per day */
+  costKcal?: number
   /** Euro one saved hour is worth, e.g. an internal working hour */
   hourValue?: number
   /** One saved hour equals this many hours of something productive ... */
@@ -44,7 +51,7 @@ export interface QuitLog {
 }
 
 export interface AppState {
-  version: 6
+  version: 7
   habits: Habit[]
   done: Record<string, DoneMap>
   quit: Record<string, QuitLog>

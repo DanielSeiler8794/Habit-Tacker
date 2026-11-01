@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { BADGES, isUnlocked, type Summary } from '../lib/gamification'
-import { formatEuro, formatMinutes, isQuit, totalEuro } from '../lib/quit'
+import { formatEuro, formatKcal, formatMinutes, isQuit, totalEuro } from '../lib/quit'
 import type { Habit } from '../lib/types'
 import { IconFlame } from './icons'
 import { SavingsCard } from './SavingsCard'
@@ -34,8 +34,9 @@ export function ProfileView({ summary, habits }: { summary: Summary; habits: Hab
                     {h.emoji} {h.name}
                   </span>
                   <span className="saved-list-value">
-                    {totalEuro(s) > 0 ? formatEuro(totalEuro(s)) : '–'}
+                    {totalEuro(s) > 0 ? formatEuro(totalEuro(s)) : s.kcal > 0 ? formatKcal(s.kcal) : '–'}
                     {s.minutes > 0 && <small>{formatMinutes(s.minutes)}</small>}
+                    {s.kcal > 0 && totalEuro(s) > 0 && <small>{formatKcal(s.kcal)}</small>}
                   </span>
                 </li>
               )

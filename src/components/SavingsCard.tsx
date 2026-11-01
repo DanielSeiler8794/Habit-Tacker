@@ -1,4 +1,4 @@
-import { formatEuro, formatMinutes, totalEuro, type Savings } from '../lib/quit'
+import { formatEuro, formatKcal, formatMinutes, totalEuro, type Savings } from '../lib/quit'
 import type { Habit } from '../lib/types'
 
 const hours = (h: number) => Math.floor(h).toLocaleString('de-DE')
@@ -21,6 +21,8 @@ export function SavingsCard({ title, saved, habit }: Props) {
     items.push({ value: formatMinutes(saved.minutes), label: habit ? `Zeit · ${habit.costMinutes} Min. pro Tag` : 'Zeit zurückgewonnen' })
   if (saved.timeValue > 0 || (habit && habit.hourValue))
     items.push({ value: formatEuro(saved.timeValue), label: habit ? `Zeitwert · ${habit.hourValue} € pro Stunde` : 'Wert der gesparten Zeit' })
+  if (saved.kcal > 0 || (habit && habit.costKcal))
+    items.push({ value: formatKcal(saved.kcal), label: habit ? `Kalorien · ${habit.costKcal} kcal pro Tag` : 'Kalorien nicht gegessen' })
   if (habit?.hourFactor)
     items.push({
       value: `${hours(saved.productiveHours)} Std`,

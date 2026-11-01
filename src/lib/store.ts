@@ -3,7 +3,7 @@ import { openCloud, type Cloud } from './cloud'
 import { DEFAULT_CATEGORY } from './categories'
 import { BADGES, isUnlocked, summarize } from './gamification'
 import { startOfDay, toKey } from './dates'
-import type { AppState, Habit, SaveMode } from './types'
+import type { AppState, Habit, SaveKind } from './types'
 
 const KEY = 'habits:v1'
 const UPDATED_KEY = 'habits:updatedAt'
@@ -76,23 +76,25 @@ export function isAppState(x: unknown): x is AppState {
   return !!s && Array.isArray(s.habits) && typeof s.done === 'object' && s.done !== null
 }
 
-export const emptyState = (): AppState => ({ version: 6, habits: [], done: {}, quit: {}, seenBadges: [] })
+export const emptyState = (): AppState => ({ version: 7, habits: [], done: {}, quit: {}, seenBadges: [] })
 
 /** Ids of the example habits earlier versions shipped with; version 6 removes them. */
 const EXAMPLE_IDS = new Set(['h-water', 'h-read', 'h-run', 'h-meditate', 'h-phone', 'q-smoke', 'q-scroll'])
 
-/** Before saveMode existed, what was saved followed from which costs were filled in. */
-function inferSaveMode(h: Habit): SaveMode | undefined {
-  if (h.costMoney && h.costMinutes) return 'both'
-  if (h.costMoney) return 'money'
-  if (h.costMinutes) return 'time'
-  return undefined
+/** Before version 7, what was saved came from saveMode, or before that from which costs were filled in. */
+function inferSaves(h: Habit): SaveKind[] {
+  if (h.saveMode === 'both') return ['money', 'time']
+  if (h.saveMode) return [h.saveMode]
+  const saves: SaveKind[] = []
+  if (h.costMoney) saves.push('money')
+  if (h.costMinutes) saves.push('time')
+  return saves
 }
 
 export function normalize(s: AppState): AppState {
   const version = (s.version as number | undefined) ?? 1
   let habits: Habit[] = s.habits.map((h) => ({ ...h, kind: h.kind ?? 'build', category: h.category ?? DEFAULT_CATEGORY }))
-  if (version < 3) habits = habits.map((h) => (h.kind === 'quit' ? { ...h, saveMode: h.saveMode ?? inferSaveMode(h) } : h))
+  if (version < 7) habits = habits.map((h) => (h.kind === 'quit' && !h.saves ? { ...h, saves: inferSaves(h) } : h))
   const done = { ...s.done }
   const quit = { ...(s.quit ?? {}) }
   let seenBadges = s.seenBadges ?? []
@@ -103,10 +105,10 @@ export function normalize(s: AppState): AppState {
       delete quit[id]
     }
     // Badges the examples had earned are forgotten, so earning them for real celebrates again.
-    const summary = summarize({ version: 6, habits, done, quit, seenBadges: [] }, startOfDay(new Date()), new Date())
+    const summary = summarize({ version: 7, habits, done, quit, seenBadges: [] }, startOfDay(new Date()), new Date())
     seenBadges = BADGES.filter((b) => isUnlocked(b, summary)).map((b) => b.id)
   }
-  return { version: 6, habits, done, quit, seenBadges }
+  return { version: 7, habits, done, quit, seenBadges }
 }
 
 function load(): AppState {

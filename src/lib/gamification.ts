@@ -37,6 +37,7 @@ export function summarize(state: AppState, today: Date, now: Date = today): Summ
       saved.minutes += q.saved.minutes
       saved.timeValue += q.saved.timeValue
       saved.productiveHours += q.saved.productiveHours
+      saved.kcal += q.saved.kcal
       bestClean = Math.max(bestClean, q.longestDays)
       if (q.relapses > 0 && q.currentDays >= 7) comeback = true
       continue
