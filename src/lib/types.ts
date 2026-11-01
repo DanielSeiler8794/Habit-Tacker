@@ -44,7 +44,7 @@ export interface QuitLog {
 }
 
 export interface AppState {
-  version: 5
+  version: 6
   habits: Habit[]
   done: Record<string, DoneMap>
   quit: Record<string, QuitLog>

@@ -2,7 +2,6 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import { openCloud, type Cloud } from './cloud'
 import { DEFAULT_CATEGORY } from './categories'
 import { BADGES, isUnlocked, summarize } from './gamification'
-import { createSeedState, SEED_SAVINGS, seedQuit } from './seed'
 import { startOfDay, toKey } from './dates'
 import type { AppState, Habit, SaveMode } from './types'
 
@@ -77,14 +76,10 @@ export function isAppState(x: unknown): x is AppState {
   return !!s && Array.isArray(s.habits) && typeof s.done === 'object' && s.done !== null
 }
 
-// Habits saved before categories existed get one: the example habits their own, the rest Alltag.
-const LEGACY_CATEGORY: Record<string, string> = {
-  'h-water': 'gesundheit',
-  'h-read': 'lernen',
-  'h-run': 'bewegung',
-  'h-meditate': 'geist',
-  'h-phone': 'geist',
-}
+export const emptyState = (): AppState => ({ version: 6, habits: [], done: {}, quit: {}, seenBadges: [] })
+
+/** Ids of the example habits earlier versions shipped with; version 6 removes them. */
+const EXAMPLE_IDS = new Set(['h-water', 'h-read', 'h-run', 'h-meditate', 'h-phone', 'q-smoke', 'q-scroll'])
 
 /** Before saveMode existed, what was saved followed from which costs were filled in. */
 function inferSaveMode(h: Habit): SaveMode | undefined {
@@ -96,24 +91,22 @@ function inferSaveMode(h: Habit): SaveMode | undefined {
 
 export function normalize(s: AppState): AppState {
   const version = (s.version as number | undefined) ?? 1
-  let habits: Habit[] = s.habits.map((h) => ({ ...h, kind: h.kind ?? 'build', category: h.category ?? LEGACY_CATEGORY[h.id] ?? DEFAULT_CATEGORY }))
+  let habits: Habit[] = s.habits.map((h) => ({ ...h, kind: h.kind ?? 'build', category: h.category ?? DEFAULT_CATEGORY }))
   if (version < 3) habits = habits.map((h) => (h.kind === 'quit' ? { ...h, saveMode: h.saveMode ?? inferSaveMode(h) } : h))
-  // Version 4 valued each resist, version 5 counts days again; the example habits get matching amounts.
-  if (version < 5) habits = habits.map((h) => (SEED_SAVINGS[h.id] ? { ...h, ...SEED_SAVINGS[h.id] } : h))
-  let quit = s.quit ?? {}
+  const done = { ...s.done }
+  const quit = { ...(s.quit ?? {}) }
   let seenBadges = s.seenBadges ?? []
-  // Data from before quit habits existed: if it still holds the example habits, add the example bad habits too.
-  if (version < 2 && habits.some((h) => h.id === 'h-water') && !habits.some((h) => h.kind === 'quit')) {
-    const extra = seedQuit()
-    habits = [...extra.habits, ...habits]
-    quit = { ...quit, ...extra.quit }
+  if (version < 6) {
+    habits = habits.filter((h) => !EXAMPLE_IDS.has(h.id))
+    for (const id of EXAMPLE_IDS) {
+      delete done[id]
+      delete quit[id]
+    }
+    // Badges the examples had earned are forgotten, so earning them for real celebrates again.
+    const summary = summarize({ version: 6, habits, done, quit, seenBadges: [] }, startOfDay(new Date()), new Date())
+    seenBadges = BADGES.filter((b) => isUnlocked(b, summary)).map((b) => b.id)
   }
-  // Badges that only appear through an upgrade are not news; mark them as seen.
-  if (version < 5) {
-    const summary = summarize({ version: 5, habits, done: s.done, quit, seenBadges }, startOfDay(new Date()), new Date())
-    seenBadges = [...new Set([...seenBadges, ...BADGES.filter((b) => isUnlocked(b, summary)).map((b) => b.id)])]
-  }
-  return { version: 5, habits, done: s.done, quit, seenBadges }
+  return { version: 6, habits, done, quit, seenBadges }
 }
 
 function load(): AppState {
@@ -124,9 +117,9 @@ function load(): AppState {
       if (isAppState(parsed)) return normalize(parsed)
     }
   } catch {
-    // storage blocked or corrupt: fall through to the example data
+    // storage blocked or corrupt: start empty
   }
-  return createSeedState()
+  return emptyState()
 }
 
 export function useAppState() {

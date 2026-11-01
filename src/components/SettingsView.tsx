@@ -1,9 +1,7 @@
 import { useRef, useState } from 'react'
 import { toKey } from '../lib/dates'
 import { inArtifact, notificationsSupported, requestNotifications, saveFile } from '../lib/reminders'
-import type { SyncStatus } from '../lib/store'
-import { createSeedState, emptyState } from '../lib/seed'
-import { isAppState, normalize } from '../lib/store'
+import { emptyState, isAppState, normalize, type SyncStatus } from '../lib/store'
 import type { AppState } from '../lib/types'
 import { ConfirmButton } from './ConfirmButton'
 import { IconBell, IconDownload, IconPhone, IconTrash, IconUpload } from './icons'
@@ -133,7 +131,7 @@ export function SettingsView({ state, sync, onReplace, onToast }: Props) {
         </div>
         <div className="settings-body">
           <h3>Daten</h3>
-          <p>Starte frisch oder lade die Beispiel-Gewohnheiten neu.</p>
+          <p>Alle Gewohnheiten und ihren Verlauf löschen und frisch starten.</p>
           <div className="btn-row">
             <ConfirmButton
               className="btn btn-danger btn-sm"
@@ -144,16 +142,6 @@ export function SettingsView({ state, sync, onReplace, onToast }: Props) {
               }}
             >
               Leer starten
-            </ConfirmButton>
-            <ConfirmButton
-              className="btn btn-ghost btn-sm"
-              confirmLabel="Daten ersetzen?"
-              onConfirm={() => {
-                onReplace(createSeedState())
-                onToast('Beispieldaten geladen')
-              }}
-            >
-              Beispieldaten
             </ConfirmButton>
           </div>
         </div>
