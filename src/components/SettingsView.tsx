@@ -3,7 +3,9 @@ import { toKey } from '../lib/dates'
 import { inArtifact, notificationsSupported, requestNotifications, saveFile } from '../lib/reminders'
 import { emptyState, isAppState, normalize, type SyncStatus } from '../lib/store'
 import type { AppState } from '../lib/types'
+import { useInstall } from '../lib/install'
 import { ConfirmButton } from './ConfirmButton'
+import { InstallButton } from './InstallButton'
 import { IconBell, IconDownload, IconPhone, IconTrash, IconUpload } from './icons'
 
 interface Props {
@@ -15,6 +17,7 @@ interface Props {
 
 export function SettingsView({ state, sync, onReplace, onToast }: Props) {
   const artifact = inArtifact()
+  const { mode } = useInstall()
   const file = useRef<HTMLInputElement>(null)
   const [permission, setPermission] = useState(notificationsSupported() ? Notification.permission : 'denied')
 
@@ -75,9 +78,18 @@ export function SettingsView({ state, sync, onReplace, onToast }: Props) {
         </div>
         <div className="settings-body">
           <h3>Aufs Handy holen</h3>
-          <p>
-            iPhone: diesen Link in Safari öffnen, auf <b>Teilen</b> tippen und <b>Zum Home-Bildschirm</b> wählen. Android: in Chrome über das Menü <b>Zum Startbildschirm hinzufügen</b>.
-          </p>
+          {mode === 'installed' ? (
+            <p>Habits ist auf diesem Gerät installiert und startet vom Home-Bildschirm.</p>
+          ) : mode === 'artifact' ? (
+            <p>
+              Öffne die App in Safari unter <b>danielseiler8794.github.io/habit-tracker</b> und lege sie dort auf den Home-Bildschirm.
+            </p>
+          ) : (
+            <>
+              <p>Mit eigenem Icon, im Vollbild und auch offline nutzbar.</p>
+              <InstallButton className="btn btn-primary btn-sm" onDone={onToast} />
+            </>
+          )}
         </div>
       </section>
 

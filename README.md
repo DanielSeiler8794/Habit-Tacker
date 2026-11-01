@@ -7,7 +7,7 @@ Schlechte Gewohnheiten abgewöhnen, gute aufbauen. Eine Web-App für das Handy, 
 ## Funktionen
 
 - **Abgewöhnen:** Die Uhr ohne Rückfall läuft von allein, jeder Tag ohne Rückfall wird automatisch gutgeschrieben. Eingetragen werden nur Rückfälle, auch nachträglich im Monatskalender.
-- **Ersparnis:** Pro Gewohnheit Geld und/oder Zeit pro Tag, Zeit optional bewertet mit eigenem Stundenwert oder als Gegenwert („1 Std = 10 Std Lernen“). Beträge in Euro.
+- **Ersparnis:** Pro Gewohnheit beliebig kombinierbar Geld, Zeit und Kalorien pro Tag. Zeit optional bewertet mit eigenem Stundenwert oder als Gegenwert („1 Std = 10 Std Lernen“). Beträge in Euro.
 - **Aufbauen:** Gute Gewohnheiten täglich oder an bestimmten Wochentagen abhaken, mit Serien und Jahres-Heatmap.
 - **Serien nach Kategorie**, Abzeichen, Backup als JSON.
 
@@ -15,7 +15,13 @@ Die Daten liegen nur im Browser des Geräts (localStorage). Für einen Gerätewe
 
 ## Aufs Handy
 
-Die Live-Adresse in Safari öffnen, **Teilen → Zum Home-Bildschirm**. Unter Android in Chrome **Zum Startbildschirm hinzufügen**.
+In der App unter **Mehr → Aufs Handy holen** auf **Zum Home-Bildschirm hinzufügen** tippen. Auf dem Handy bietet die App das beim ersten Öffnen auch einmal von selbst an. Die App erkennt das Gerät:
+
+- **Android** (Chrome, Edge, Samsung Internet): öffnet direkt den Installations-Dialog des Browsers.
+- **iPhone/iPad in Safari:** zeigt die drei Schritte **Teilen → Zum Home-Bildschirm → Hinzufügen**. Apple erlaubt Web-Apps kein automatisches Installieren.
+- **iPhone in einem anderen Browser:** bittet darum, die Seite in Safari zu öffnen, und kopiert den Link.
+
+Läuft die App schon vom Home-Bildschirm, verschwindet der Button.
 
 ## Entwicklung
 

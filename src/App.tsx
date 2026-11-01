@@ -131,6 +131,7 @@ export default function App() {
                 onRelapse={relapse}
                 onOpen={setDetailId}
                 onAdd={() => setForm({ habit: null })}
+                onToast={showToast}
               />
             )}
             {tab === 'profile' && <ProfileView summary={summary} habits={state.habits} />}

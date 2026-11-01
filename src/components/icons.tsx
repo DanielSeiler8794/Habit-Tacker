@@ -60,3 +60,12 @@ export const IconX = (p: P) => (
 export const IconPhone = (p: P) => (
   <svg {...base(p)}><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M11 18h2" /></svg>
 )
+export const IconShare = (p: P) => (
+  <svg {...base(p)}><path d="M12 3v12M8 7l4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" /></svg>
+)
+export const IconAddSquare = (p: P) => (
+  <svg {...base(p)}><rect x="3" y="3" width="18" height="18" rx="4" /><path d="M12 8v8M8 12h8" /></svg>
+)
+export const IconMore = (p: P) => (
+  <svg {...base(p)}><circle cx="5" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="19" cy="12" r="1.4" /></svg>
+)

@@ -7,6 +7,7 @@ import { isScheduled } from '../lib/stats'
 import type { AppState } from '../lib/types'
 import { CategoryStreaks } from './CategoryStreaks'
 import { HabitCard } from './HabitCard'
+import { InstallHint } from './InstallHint'
 import { IconPlus } from './icons'
 import { ProgressRing } from './ProgressRing'
 import { QuitCard } from './QuitCard'
@@ -23,6 +24,7 @@ interface Props {
   onRelapse: (id: string) => void
   onOpen: (id: string) => void
   onAdd: () => void
+  onToast: (message: string) => void
 }
 
 export function TodayView(p: Props) {
@@ -64,6 +66,8 @@ export function TodayView(p: Props) {
           <h1 className="title">{isToday ? greeting(now) : 'Rückblick'}</h1>
         </div>
       </header>
+
+      <InstallHint onDone={p.onToast} />
 
       {state.habits.length === 0 ? (
         <EmptyState onAdd={p.onAdd} />
