@@ -2,7 +2,7 @@
 
 Schlechte Gewohnheiten abgewöhnen, gute aufbauen. Eine Web-App für das Handy, installierbar als PWA.
 
-**Live:** https://danielseiler8794.github.io/Habit-Tracker/
+**Live:** https://danielseiler8794.github.io/habit-tracker/
 
 ## Funktionen
 
