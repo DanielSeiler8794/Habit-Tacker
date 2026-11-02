@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CATEGORIES, DEFAULT_CATEGORY } from '../lib/categories'
 import { ALL_DAYS, toKey, WEEK_ORDER, WEEKDAY_SHORT } from '../lib/dates'
 import { notificationsSupported, requestNotifications } from '../lib/reminders'
+import { BUILD_TEMPLATES, QUIT_TEMPLATES, type Template } from '../lib/templates'
 import type { Habit, HabitKind, SaveKind } from '../lib/types'
 
 const BUILD_EMOJIS = ['💧', '📚', '🏃', '🧘', '🌙', '🥗', '💪', '🚴', '✍️', '🎸', '🧠', '💊', '🛏️', '☀️', '🍎', '🧹', '💰', '🌿', '🎯', '🫁', '🐕', '❤️', '🦷', '🚶']
@@ -23,7 +24,16 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
   const [emoji, setEmoji] = useState(habit?.emoji ?? QUIT_EMOJIS[0])
   const [category, setCategory] = useState(habit?.category ?? DEFAULT_CATEGORY)
   const [days, setDays] = useState<number[]>(habit?.days ?? ALL_DAYS)
-  const [mode, setMode] = useState<'daily' | 'custom'>(habit && habit.days.length < 7 ? 'custom' : 'daily')
+  const [mode, setMode] = useState<'daily' | 'custom' | 'weekly'>(
+    habit?.frequency === 'weekly' ? 'weekly' : habit && habit.days.length < 7 ? 'custom' : 'daily',
+  )
+  const [timesPerWeek, setTimesPerWeek] = useState(habit?.timesPerWeek ?? 3)
+  const [multi, setMulti] = useState((habit?.target ?? 1) > 1)
+  const [target, setTarget] = useState(String(habit?.target && habit.target > 1 ? habit.target : 8))
+  const [unit, setUnit] = useState(habit?.unit ?? '')
+  const [goalName, setGoalName] = useState(habit?.goalName ?? '')
+  const [goalEuro, setGoalEuro] = useState(habit?.goalEuro ? String(habit.goalEuro) : '')
+  const [template, setTemplate] = useState(habit?.template)
   const [reminderOn, setReminderOn] = useState(!!habit?.reminder)
   const [time, setTime] = useState(habit?.reminder ?? '08:00')
   const [since, setSince] = useState(localInput(habit?.quitSince ? new Date(habit.quitSince) : new Date()))
@@ -36,11 +46,13 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
   const [hourValue, setHourValue] = useState(habit?.hourValue ? String(habit.hourValue) : '')
   const [hourFactor, setHourFactor] = useState(habit?.hourFactor ? String(habit.hourFactor) : '')
   const [factorLabel, setFactorLabel] = useState(habit?.factorLabel ?? '')
+  // Guards against a double tap saving the habit twice while the sheet closes.
+  const submitted = useRef(false)
   const [permission, setPermission] = useState(notificationsSupported() ? Notification.permission : 'denied')
 
   const quit = kind === 'quit'
   const emojis = quit ? QUIT_EMOJIS : BUILD_EMOJIS
-  const effectiveDays = quit || mode === 'daily' ? ALL_DAYS : days
+  const effectiveDays = quit || mode !== 'custom' ? ALL_DAYS : days
   const sinceDate = new Date(since)
   const sinceValid = !quit || (!Number.isNaN(+sinceDate) && sinceDate <= new Date())
   const valid = name.trim().length > 0 && effectiveDays.length > 0 && sinceValid
@@ -58,13 +70,36 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
     const n = Number(v.replace(',', '.'))
     return Number.isFinite(n) && n > 0 ? n : undefined
   }
+  const str = (n: number | undefined) => (n ? String(n) : '')
+
+  /** A template fills the form with typical values to adjust; picking it again keeps your edits. */
+  const applyTemplate = (t: Template) => {
+    const f = t.fill
+    setName(t.name)
+    setEmoji(t.emoji)
+    if (f.category) setCategory(f.category)
+    setTemplate(f.template)
+    if (quit) {
+      setSaves(f.saves ?? ['money'])
+      setMoney(str(f.costMoney))
+      setMinutes(str(f.costMinutes))
+      setKcal(str(f.costKcal))
+    } else {
+      setMode(f.frequency === 'weekly' ? 'weekly' : 'daily')
+      if (f.timesPerWeek) setTimesPerWeek(f.timesPerWeek)
+      setMulti((f.target ?? 1) > 1)
+      if (f.target) setTarget(String(f.target))
+      setUnit(f.unit ?? '')
+    }
+  }
 
   return (
     <form
       className="form"
       onSubmit={(e) => {
         e.preventDefault()
-        if (!valid) return
+        if (!valid || submitted.current) return
+        submitted.current = true
         const base = { id: habit?.id ?? `h-${Date.now().toString(36)}`, name: name.trim(), emoji, kind, category }
         onSave(
           quit
@@ -82,8 +117,22 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
                 hourValue: has('time') ? num(hourValue) : undefined,
                 hourFactor: has('time') ? num(hourFactor) : undefined,
                 factorLabel: has('time') && num(hourFactor) ? factorLabel.trim() || undefined : undefined,
+                goalName: goalName.trim() && num(goalEuro) ? goalName.trim() : undefined,
+                goalEuro: goalName.trim() ? num(goalEuro) : undefined,
+                template,
+                archivedAt: habit?.archivedAt,
               }
-            : { ...base, days: [...effectiveDays].sort(), reminder: reminderOn ? time : null, createdAt: habit?.createdAt ?? toKey(new Date()) },
+            : {
+                ...base,
+                days: [...effectiveDays].sort(),
+                frequency: mode === 'weekly' ? 'weekly' : 'days',
+                timesPerWeek: mode === 'weekly' ? timesPerWeek : undefined,
+                target: multi && num(target) && num(target)! > 1 ? Math.round(num(target)!) : undefined,
+                unit: multi ? unit.trim() || undefined : undefined,
+                reminder: reminderOn ? time : null,
+                createdAt: habit?.createdAt ?? toKey(new Date()),
+                archivedAt: habit?.archivedAt,
+              },
         )
       }}
     >
@@ -100,6 +149,19 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
         </div>
       )}
 
+      {!habit && (
+        <fieldset className="field">
+          <legend>Vorlage (optional)</legend>
+          <div className="template-row">
+            {(quit ? QUIT_TEMPLATES : BUILD_TEMPLATES).map((t) => (
+              <button type="button" key={t.id} className={name === t.name ? 'is-active' : ''} onClick={() => applyTemplate(t)}>
+                <span aria-hidden>{t.emoji}</span> {t.name}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
       <div className="name-row">
         <span className="name-emoji">{emoji}</span>
         <input
@@ -110,7 +172,6 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
           placeholder={quit ? 'z. B. Rauchen' : 'z. B. 20 Minuten lesen'}
           aria-label="Name"
           maxLength={40}
-          autoFocus={!habit}
           enterKeyHint="done"
         />
       </div>
@@ -198,16 +259,28 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
               <p className="hint">Der Stundenwert ist z. B. deine interne Arbeitsstunde. Der Faktor zeigt, was du in der Zeit Produktiveres schaffen könntest.</p>
             </fieldset>
           )}
+
+          <fieldset className="field">
+            <legend>Sparziel (optional)</legend>
+            <div className="cost-row">
+              <input id="goal-name" className="input" value={goalName} onChange={(e) => setGoalName(e.target.value)} placeholder="z. B. Kopfhörer" maxLength={30} aria-label="Wofür sparst du?" />
+              <label className="cost">
+                <input id="goal-euro" className="input" inputMode="decimal" value={goalEuro} onChange={(e) => setGoalEuro(e.target.value)} placeholder="0" aria-label="Zielbetrag in Euro" />
+                <span>€</span>
+              </label>
+            </div>
+            <p className="hint">Die Ersparnis füllt das Ziel automatisch auf.</p>
+          </fieldset>
         </>
       ) : (
         <>
           <fieldset className="field">
             <legend>Wie oft?</legend>
-            <div className="segmented">
-              {(['daily', 'custom'] as const).map((m) => (
+            <div className="segmented three">
+              {(['daily', 'custom', 'weekly'] as const).map((m) => (
                 <button type="button" key={m} className={mode === m ? 'is-active' : ''} onClick={() => setMode(m)}>
                   {mode === m && <motion.span layoutId="seg" className="seg-pill" transition={{ type: 'spring', stiffness: 420, damping: 34 }} />}
-                  <span>{m === 'daily' ? 'Täglich' : 'Bestimmte Tage'}</span>
+                  <span>{m === 'daily' ? 'Täglich' : m === 'custom' ? 'Wochentage' : 'X× / Woche'}</span>
                 </button>
               ))}
             </div>
@@ -218,6 +291,39 @@ export function HabitForm({ habit, onSave, onCancel }: Props) {
                     {WEEKDAY_SHORT[d]}
                   </button>
                 ))}
+              </div>
+            )}
+            {mode === 'weekly' && (
+              <div className="stepper">
+                <button type="button" onClick={() => setTimesPerWeek((n) => Math.max(1, n - 1))} aria-label="Weniger">
+                  −
+                </button>
+                <span>
+                  <b>{timesPerWeek}×</b> pro Woche, an beliebigen Tagen
+                </span>
+                <button type="button" onClick={() => setTimesPerWeek((n) => Math.min(7, n + 1))} aria-label="Mehr">
+                  +
+                </button>
+              </div>
+            )}
+          </fieldset>
+
+          <fieldset className="field">
+            <legend>Ziel pro Tag</legend>
+            <div className="reminder-row">
+              <label className="switch">
+                <input type="checkbox" checked={multi} onChange={(e) => setMulti(e.target.checked)} />
+                <span className="switch-track" />
+                <span>{multi ? 'Menge zählen' : 'Einfach abhaken'}</span>
+              </label>
+            </div>
+            {multi && (
+              <div className="cost-row">
+                <label className="cost">
+                  <input id="target" className="input" inputMode="numeric" value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Menge pro Tag" />
+                  <span>pro Tag</span>
+                </label>
+                <input id="unit" className="input" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="z. B. Gläser" aria-label="Einheit" maxLength={16} />
               </div>
             )}
           </fieldset>

@@ -3,7 +3,8 @@ import { categoryStats } from '../lib/categories'
 import { formatLong, fromKey, greeting, toKey } from '../lib/dates'
 import type { Summary } from '../lib/gamification'
 import { formatEuro, formatKcal, formatMinutes, isQuit, totalEuro } from '../lib/quit'
-import { isScheduled } from '../lib/stats'
+import { addDays } from '../lib/dates'
+import { isArchived, isPlannedOn, isWeekly, pausedCheck, weekStart } from '../lib/stats'
 import type { AppState } from '../lib/types'
 import { CategoryStreaks } from './CategoryStreaks'
 import { HabitCard } from './HabitCard'
@@ -21,6 +22,7 @@ interface Props {
   selected: string
   onSelect: (key: string) => void
   onToggle: (id: string, key: string) => void
+  onCount: (id: string, key: string, delta: number) => void
   onRelapse: (id: string) => void
   onOpen: (id: string) => void
   onAdd: () => void
@@ -31,17 +33,26 @@ export function TodayView(p: Props) {
   const { state, summary, now, today, selected } = p
   const day = fromKey(selected)
   const isToday = selected === toKey(today)
-  const quitHabits = state.habits.filter(isQuit)
-  const buildHabits = state.habits.filter((h) => !isQuit(h))
+  const active = state.habits.filter((h) => !isArchived(h))
+  const quitHabits = active.filter(isQuit)
+  const buildHabits = active.filter((h) => !isQuit(h))
+  const paused = pausedCheck(state.pauses)
+  const dayPaused = paused(selected)
   const existing = buildHabits.filter((h) => h.createdAt <= selected)
-  const planned = existing.filter((h) => isScheduled(h, day))
-  const free = existing.filter((h) => !isScheduled(h, day))
+  const daily = existing.filter((h) => !isWeekly(h))
+  const weekly = existing.filter(isWeekly)
+  const planned = daily.filter((h) => isPlannedOn(h, day, paused))
+  const free = daily.filter((h) => !isPlannedOn(h, day, paused))
+  const weekKeys = Array.from({ length: 7 }, (_, i) => toKey(addDays(weekStart(day), i)))
+  const weekDone = (id: string) => weekKeys.filter((k) => state.done[id]?.[k]).length
   const doneCount = planned.filter((h) => state.done[h.id]?.[selected]).length
   const ratio = planned.length ? doneCount / planned.length : 0
   const complete = planned.length > 0 && doneCount === planned.length
   const left = planned.length - doneCount
 
-  const buildMessage = !planned.length
+  const buildMessage = dayPaused
+    ? 'Pausetag: Deine Serien laufen weiter.'
+    : !planned.length
     ? 'Heute ist nichts zum Aufbauen geplant.'
     : complete
       ? isToday
@@ -140,7 +151,13 @@ export function TodayView(p: Props) {
                 </span>
               </div>
               <WeekStrip state={state} today={today} selected={selected} onSelect={p.onSelect} />
-              {quitHabits.length > 0 && planned.length > 0 && <p className="build-msg">{buildMessage}</p>}
+              {dayPaused ? (
+                <p className="pause-banner">
+                  <b>Pausetag.</b> Heute zählt nichts gegen deine Serien. Abhaken geht trotzdem.
+                </p>
+              ) : (
+                quitHabits.length > 0 && planned.length > 0 && <p className="build-msg">{buildMessage}</p>
+              )}
               <motion.div layout className="habit-list">
                 <AnimatePresence initial={false}>
                   {planned.map((h) => (
@@ -149,15 +166,42 @@ export function TodayView(p: Props) {
                       habit={h}
                       done={!!state.done[h.id]?.[selected]}
                       streak={summary.perHabit[h.id]?.current ?? 0}
+                      count={state.counts[h.id]?.[selected]}
                       onToggle={() => p.onToggle(h.id, selected)}
+                      onCount={(delta) => p.onCount(h.id, selected, delta)}
                       onOpen={() => p.onOpen(h.id)}
                     />
                   ))}
                 </AnimatePresence>
               </motion.div>
+              {weekly.length > 0 && (
+                <>
+                  <p className="sub-head">Diese Woche</p>
+                  <div className="habit-list">
+                    {weekly.map((h) => {
+                      const n = weekDone(h.id)
+                      const times = h.timesPerWeek ?? 1
+                      return (
+                        <HabitCard
+                          key={h.id}
+                          habit={h}
+                          done={!!state.done[h.id]?.[selected]}
+                          streak={summary.perHabit[h.id]?.current ?? 0}
+                          streakUnit="week"
+                          note={n >= times ? `Wochenziel erreicht: ${n}/${times}` : `${n} von ${times} diese Woche`}
+                          count={state.counts[h.id]?.[selected]}
+                          onToggle={() => p.onToggle(h.id, selected)}
+                          onCount={(delta) => p.onCount(h.id, selected, delta)}
+                          onOpen={() => p.onOpen(h.id)}
+                        />
+                      )
+                    })}
+                  </div>
+                </>
+              )}
               {free.length > 0 && (
                 <>
-                  <p className="sub-head">Heute nicht geplant</p>
+                  <p className="sub-head">{dayPaused ? 'Pausiert' : 'Heute nicht geplant'}</p>
                   <div className="habit-list">
                     {free.map((h) => (
                       <HabitCard
@@ -166,7 +210,9 @@ export function TodayView(p: Props) {
                         off
                         done={!!state.done[h.id]?.[selected]}
                         streak={summary.perHabit[h.id]?.current ?? 0}
+                        count={state.counts[h.id]?.[selected]}
                         onToggle={() => p.onToggle(h.id, selected)}
+                        onCount={(delta) => p.onCount(h.id, selected, delta)}
                         onOpen={() => p.onOpen(h.id)}
                       />
                     ))}

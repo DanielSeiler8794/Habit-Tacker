@@ -1,8 +1,8 @@
 import { categoryLabel } from '../lib/categories'
 import { describeDays } from '../lib/dates'
 import { buildIcs, downloadFile, googleCalendarUrl, inArtifact } from '../lib/reminders'
-import type { HabitStats } from '../lib/stats'
-import type { DoneMap, Habit } from '../lib/types'
+import { pausedCheck, type HabitStats } from '../lib/stats'
+import type { DoneMap, Habit, Pause } from '../lib/types'
 import { useMemo } from 'react'
 import { ConfirmButton } from './ConfirmButton'
 import { buildCells, Heatmap } from './Heatmap'
@@ -14,12 +14,16 @@ interface Props {
   stats: HabitStats
   today: Date
   onToggle: (key: string) => void
+  paused: Pause[]
+  onArchive: (archived: boolean) => void
   onEdit: () => void
   onDelete: () => void
 }
 
-export function HabitDetail({ habit, done, stats, today, onToggle, onEdit, onDelete }: Props) {
-  const cellOf = useMemo(() => buildCells(habit, done, today), [habit, done, today])
+export function HabitDetail({ habit, done, stats, today, onToggle, paused, onArchive, onEdit, onDelete }: Props) {
+  const cellOf = useMemo(() => buildCells(habit, done, today, pausedCheck(paused)), [habit, done, today, paused])
+  const unit = (n: number) => (stats.unit === 'week' ? (n === 1 ? 'Woche' : 'Wochen') : n === 1 ? 'Tag' : 'Tage')
+  const freq = habit.frequency === 'weekly' ? `${habit.timesPerWeek ?? 1}× pro Woche` : describeDays(habit.days)
   return (
     <div className="detail">
       <div className="detail-head">
@@ -27,7 +31,9 @@ export function HabitDetail({ habit, done, stats, today, onToggle, onEdit, onDel
         <div>
           <h2 className="detail-title">{habit.name}</h2>
           <p className="detail-sub">
-            {categoryLabel(habit.category)} · {describeDays(habit.days)}
+            {categoryLabel(habit.category)} · {freq}
+            {(habit.target ?? 1) > 1 && ` · ${habit.target} ${habit.unit ?? ''} pro Tag`}
+            {habit.archivedAt && ` · geschafft am ${new Date(habit.archivedAt).toLocaleDateString('de-DE')}`}
             {habit.reminder && (
               <>
                 {' · '}
@@ -44,15 +50,15 @@ export function HabitDetail({ habit, done, stats, today, onToggle, onEdit, onDel
             <IconFlame size={14} /> Aktuelle Serie
           </span>
           <span className="stat-value">{stats.current}</span>
-          <span className="stat-unit">{stats.current === 1 ? 'Tag' : 'Tage'}</span>
+          <span className="stat-unit">{unit(stats.current)}</span>
         </div>
         <div className="stat">
           <span className="stat-label">Längste Serie</span>
           <span className="stat-value">{stats.longest}</span>
-          <span className="stat-unit">Tage</span>
+          <span className="stat-unit">{unit(stats.longest)}</span>
         </div>
         <div className="stat">
-          <span className="stat-label">Quote 30 Tage</span>
+          <span className="stat-label">{stats.unit === 'week' ? 'Wochen erreicht' : 'Quote 30 Tage'}</span>
           <span className="stat-value">{Math.round(stats.rate30 * 100)}</span>
           <span className="stat-unit">%</span>
         </div>
@@ -75,6 +81,15 @@ export function HabitDetail({ habit, done, stats, today, onToggle, onEdit, onDel
       </section>
 
       <div className="detail-actions">
+        {habit.archivedAt ? (
+          <button className="btn btn-ghost" onClick={() => onArchive(false)}>
+            Wieder aufnehmen
+          </button>
+        ) : (
+          <ConfirmButton className="btn btn-ghost" confirmLabel="Wirklich als geschafft markieren?" onConfirm={() => onArchive(true)}>
+            🏁 Geschafft – zu den Erfolgen
+          </ConfirmButton>
+        )}
         {habit.reminder && (
           <a className="btn btn-ghost" href={googleCalendarUrl(habit)} target="_blank" rel="noopener noreferrer">
             <IconCalendar size={18} /> In Google Kalender eintragen

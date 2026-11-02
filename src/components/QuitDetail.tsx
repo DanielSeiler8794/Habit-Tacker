@@ -4,6 +4,8 @@ import type { Habit, QuitLog } from '../lib/types'
 import { ConfirmButton } from './ConfirmButton'
 import { IconEdit, IconFlame, IconTrash } from './icons'
 import { QuitCalendar } from './QuitCalendar'
+import { Milestones } from './Milestones'
+import { RelapsePatterns } from './RelapsePatterns'
 import { SavingsCard } from './SavingsCard'
 
 interface Props {
@@ -12,12 +14,14 @@ interface Props {
   stats: QuitStats
   now: Date
   onAddRelapse: (key: string) => void
+  onEditRelapse: (key: string) => void
   onClearRelapse: (key: string) => void
+  onArchive: (archived: boolean) => void
   onEdit: () => void
   onDelete: () => void
 }
 
-export function QuitDetail({ habit, log, stats, now, onAddRelapse, onClearRelapse, onEdit, onDelete }: Props) {
+export function QuitDetail({ habit, log, stats, now, onAddRelapse, onEditRelapse, onClearRelapse, onArchive, onEdit, onDelete }: Props) {
   const since = quitSince(habit).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })
 
   return (
@@ -27,7 +31,7 @@ export function QuitDetail({ habit, log, stats, now, onAddRelapse, onClearRelaps
         <div>
           <h2 className="detail-title">{habit.name}</h2>
           <p className="detail-sub">
-            {categoryLabel(habit.category)} · Abgewöhnen seit {since}
+            {categoryLabel(habit.category)} · {habit.archivedAt ? `Geschafft am ${new Date(habit.archivedAt).toLocaleDateString('de-DE')}` : `Abgewöhnen seit ${since}`}
           </p>
         </div>
       </div>
@@ -57,11 +61,31 @@ export function QuitDetail({ habit, log, stats, now, onAddRelapse, onClearRelaps
         </div>
       </div>
 
-      <QuitCalendar habit={habit} log={log} now={now} onAddRelapse={onAddRelapse} onClearRelapse={onClearRelapse} />
-
       <SavingsCard title="Gespart" saved={stats.saved} habit={habit} />
 
+      {!habit.archivedAt && <Milestones habit={habit} currentDays={stats.currentDays} />}
+
+      <QuitCalendar
+        habit={habit}
+        log={log}
+        now={now}
+        onAddRelapse={onAddRelapse}
+        onEditRelapse={onEditRelapse}
+        onClearRelapse={onClearRelapse}
+      />
+
+      <RelapsePatterns log={log} />
+
       <div className="detail-actions">
+        {habit.archivedAt ? (
+          <button className="btn btn-ghost" onClick={() => onArchive(false)}>
+            Wieder aufnehmen
+          </button>
+        ) : (
+          <ConfirmButton className="btn btn-ghost" confirmLabel="Wirklich als geschafft markieren?" onConfirm={() => onArchive(true)}>
+            🏁 Geschafft – zu den Erfolgen
+          </ConfirmButton>
+        )}
         <button className="btn btn-ghost" onClick={onEdit}>
           <IconEdit size={18} /> Bearbeiten
         </button>

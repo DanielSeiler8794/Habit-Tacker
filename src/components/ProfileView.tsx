@@ -1,13 +1,23 @@
 import { motion } from 'framer-motion'
 import { BADGES, isUnlocked, type Summary } from '../lib/gamification'
 import { formatEuro, formatKcal, formatMinutes, isQuit, totalEuro } from '../lib/quit'
-import type { Habit } from '../lib/types'
+import type { AppState } from '../lib/types'
+import { MonthReview } from './MonthReview'
 import { IconFlame } from './icons'
 import { SavingsCard } from './SavingsCard'
 
-export function ProfileView({ summary, habits }: { summary: Summary; habits: Habit[] }) {
+interface Props {
+  summary: Summary
+  state: AppState
+  now: Date
+  onOpen: (id: string) => void
+}
+
+export function ProfileView({ summary, state, now, onOpen }: Props) {
+  const habits = state.habits
   const unlocked = BADGES.filter((b) => isUnlocked(b, summary)).length
-  const quitHabits = habits.filter(isQuit)
+  const quitHabits = habits.filter((h) => isQuit(h) && !h.archivedAt)
+  const archived = habits.filter((h) => h.archivedAt)
   return (
     <div className="view">
       <header className="top">
@@ -38,6 +48,38 @@ export function ProfileView({ summary, habits }: { summary: Summary; habits: Hab
                     {s.minutes > 0 && <small>{formatMinutes(s.minutes)}</small>}
                     {s.kcal > 0 && totalEuro(s) > 0 && <small>{formatKcal(s.kcal)}</small>}
                   </span>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+
+      <MonthReview state={state} now={now} />
+
+      {archived.length > 0 && (
+        <section className="card">
+          <div className="card-head">
+            <h3>🏁 Geschafft</h3>
+            <span className="count">{archived.length}</span>
+          </div>
+          <ul className="saved-list">
+            {archived.map((h) => {
+              const q = summary.perQuit[h.id]
+              const b = summary.perHabit[h.id]
+              const line = q
+                ? `${q.longestDays} Tage längste Phase${totalEuro(q.saved) > 0 ? ` · ${formatEuro(totalEuro(q.saved))} gespart` : ''}`
+                : b
+                  ? `${b.total}× erledigt · Serie bis ${b.longest} ${b.unit === 'week' ? 'Wochen' : 'Tage'}`
+                  : ''
+              return (
+                <li key={h.id}>
+                  <button className="archived-row" onClick={() => onOpen(h.id)}>
+                    <span className="saved-list-name">
+                      {h.emoji} {h.name}
+                    </span>
+                    <span className="muted small">{line}</span>
+                  </button>
                 </li>
               )
             })}

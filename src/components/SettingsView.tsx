@@ -2,20 +2,31 @@ import { useRef, useState } from 'react'
 import { toKey } from '../lib/dates'
 import { inArtifact, notificationsSupported, requestNotifications, saveFile } from '../lib/reminders'
 import { emptyState, isAppState, normalize, type SyncStatus } from '../lib/store'
-import type { AppState } from '../lib/types'
+import type { AppState, Pause } from '../lib/types'
 import { useInstall } from '../lib/install'
 import { ConfirmButton } from './ConfirmButton'
 import { InstallButton } from './InstallButton'
-import { IconBell, IconDownload, IconPhone, IconTrash, IconUpload } from './icons'
+import { ReorderList } from './ReorderList'
+import { Sheet } from './Sheet'
+import { IconBell, IconCalendar, IconDownload, IconEdit, IconPhone, IconTrash, IconUpload } from './icons'
 
 interface Props {
   state: AppState
   sync: SyncStatus
   onReplace: (s: AppState) => void
+  onReorder: (ids: string[]) => void
+  onAddPause: (p: Pause) => void
+  onRemovePause: (index: number) => void
   onToast: (msg: string) => void
 }
 
-export function SettingsView({ state, sync, onReplace, onToast }: Props) {
+export function SettingsView({ state, sync, onReplace, onReorder, onAddPause, onRemovePause, onToast }: Props) {
+  const [ordering, setOrdering] = useState(false)
+  const todayKey = toKey(new Date())
+  const [pauseFrom, setPauseFrom] = useState(todayKey)
+  const [pauseTo, setPauseTo] = useState(todayKey)
+  const active = state.habits.filter((h) => !h.archivedAt)
+  const fmt = (k: string) => new Date(`${k}T12:00:00`).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })
   const artifact = inArtifact()
   const { mode } = useInstall()
   const file = useRef<HTMLInputElement>(null)
@@ -35,6 +46,79 @@ export function SettingsView({ state, sync, onReplace, onToast }: Props) {
           <h1 className="title">Deine App</h1>
         </div>
       </header>
+
+      <section className="card settings-card">
+        <div className="settings-icon">
+          <IconCalendar size={20} />
+        </div>
+        <div className="settings-body">
+          <h3>Pause-Tage</h3>
+          <p>Urlaub oder krank? An Pause-Tagen zählen gute Gewohnheiten nicht gegen deine Serien. Abgewöhnen läuft weiter.</p>
+          {state.pauses.length > 0 && (
+            <ul className="pause-list">
+              {state.pauses.map((p, i) => (
+                <li key={`${p.from}-${p.to}`}>
+                  <span>{p.from === p.to ? fmt(p.from) : `${fmt(p.from)} – ${fmt(p.to)}`}</span>
+                  <button className="link-btn" onClick={() => onRemovePause(i)}>
+                    Entfernen
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="pause-form">
+            <label>
+              <span>Von</span>
+              <input id="pause-from" type="date" className="input" value={pauseFrom} onChange={(e) => {
+                setPauseFrom(e.target.value)
+                if (e.target.value > pauseTo) setPauseTo(e.target.value)
+              }} />
+            </label>
+            <label>
+              <span>Bis</span>
+              <input id="pause-to" type="date" className="input" value={pauseTo} min={pauseFrom} onChange={(e) => setPauseTo(e.target.value)} />
+            </label>
+          </div>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={!pauseFrom || !pauseTo || pauseTo < pauseFrom}
+            onClick={() => {
+              onAddPause({ from: pauseFrom, to: pauseTo })
+              onToast(pauseFrom === pauseTo ? `Pause am ${fmt(pauseFrom)}` : `Pause vom ${fmt(pauseFrom)} bis ${fmt(pauseTo)}`)
+            }}
+          >
+            Pause hinzufügen
+          </button>
+        </div>
+      </section>
+
+      {active.length > 1 && (
+        <section className="card settings-card">
+          <div className="settings-icon">
+            <IconEdit size={20} />
+          </div>
+          <div className="settings-body">
+            <h3>Reihenfolge</h3>
+            <p>Bestimme, welche Gewohnheiten im Heute-Screen oben stehen.</p>
+            <button className="btn btn-ghost btn-sm" onClick={() => setOrdering(true)}>
+              Sortieren
+            </button>
+          </div>
+        </section>
+      )}
+      <Sheet open={ordering} onClose={() => setOrdering(false)} label="Reihenfolge">
+        {ordering && (
+          <ReorderList
+            habits={active}
+            onCancel={() => setOrdering(false)}
+            onSave={(ids) => {
+              onReorder(ids)
+              setOrdering(false)
+              onToast('Reihenfolge gespeichert')
+            }}
+          />
+        )}
+      </Sheet>
 
       <section className="card settings-card">
         <div className="settings-icon">

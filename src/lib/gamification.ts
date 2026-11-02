@@ -1,6 +1,6 @@
 import { addDays, fromKey, toKey } from './dates'
 import { emptySavings, isQuit, quitStats, totalEuro, type QuitStats, type Savings } from './quit'
-import { habitsForDay, habitStats, type HabitStats } from './stats'
+import { habitsForDay, habitStats, pausedCheck, type HabitStats } from './stats'
 import type { AppState } from './types'
 
 export interface Summary {
@@ -28,6 +28,7 @@ export function summarize(state: AppState, today: Date, now: Date = today): Summ
   let cleanDaysTotal = 0
   let bestClean = 0
   let comeback = false
+  const paused = pausedCheck(state.pauses)
   for (const h of state.habits) {
     if (isQuit(h)) {
       const q = quitStats(h, state.quit[h.id], now)
@@ -42,7 +43,7 @@ export function summarize(state: AppState, today: Date, now: Date = today): Summ
       if (q.relapses > 0 && q.currentDays >= 7) comeback = true
       continue
     }
-    const s = habitStats(h, state.done[h.id], today)
+    const s = habitStats(h, state.done[h.id], today, paused)
     perHabit[h.id] = s
     totalDone += s.total
     bestStreak = Math.max(bestStreak, s.longest)

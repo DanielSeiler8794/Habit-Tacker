@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { addDays, fromKey, MONTH_SHORT, toKey } from '../lib/dates'
-import { isScheduled } from '../lib/stats'
+import { isPlannedOn, isWeekly } from '../lib/stats'
 import type { DoneMap, Habit } from '../lib/types'
 
 export interface Cell {
@@ -19,15 +19,16 @@ interface Props {
 
 const WEEKS = 53
 
-/** Good habit: done days get brighter the longer the streak runs. */
-export function buildCells(habit: Habit, done: DoneMap | undefined, today: Date) {
+/** Good habit: done days get brighter the longer the streak runs; paused days stay neutral. */
+export function buildCells(habit: Habit, done: DoneMap | undefined, today: Date, paused: (k: string) => boolean = () => false) {
+  const due = (d: Date) => isPlannedOn(habit, d, paused)
   const tKey = toKey(today)
   const created = fromKey(habit.createdAt)
   const run = new Map<string, number>()
   let r = 0
   for (let d = created; d <= today; d = addDays(d, 1)) {
     const k = toKey(d)
-    if (!isScheduled(habit, d)) {
+    if (!due(d)) {
       if (done?.[k]) run.set(k, Math.max(r, 1))
       continue
     }
@@ -38,7 +39,8 @@ export function buildCells(habit: Habit, done: DoneMap | undefined, today: Date)
   return (d: Date, k: string): Cell => {
     if (done?.[k]) return { kind: 'done', strength: Math.min(run.get(k) ?? 1, 14) / 14, label: 'erledigt' }
     if (d < created) return { kind: 'pre' }
-    if (isScheduled(habit, d) && k !== tKey) return { kind: 'miss', label: 'verpasst' }
+    if (paused(k)) return { kind: 'off', label: 'Pause' }
+    if (!isWeekly(habit) && due(d) && k !== tKey) return { kind: 'miss', label: 'verpasst' }
     return { kind: 'off' }
   }
 }

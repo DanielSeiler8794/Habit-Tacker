@@ -3,7 +3,7 @@ import { openCloud, type Cloud } from './cloud'
 import { DEFAULT_CATEGORY } from './categories'
 import { BADGES, isUnlocked, summarize } from './gamification'
 import { startOfDay, toKey } from './dates'
-import type { AppState, Habit, SaveKind } from './types'
+import type { AppState, Habit, Pause, RelapseNote, SaveKind } from './types'
 
 const KEY = 'habits:v1'
 const UPDATED_KEY = 'habits:updatedAt'
@@ -21,7 +21,15 @@ function loadUpdatedAt() {
 
 export type Action =
   | { type: 'toggle'; id: string; key: string }
-  | { type: 'relapse' | 'unrelapse'; id: string; at: string }
+  | { type: 'relapse'; id: string; at: string; note?: RelapseNote }
+  | { type: 'unrelapse'; id: string; at: string }
+  /** Moves a relapse to another time and/or changes its note */
+  | { type: 'editRelapse'; id: string; oldAt: string; at: string; note?: RelapseNote }
+  /** Adds delta to a good habit's amount for a day; reaching the target marks it done */
+  | { type: 'count'; id: string; key: string; delta: number }
+  | { type: 'reorder'; ids: string[] }
+  | { type: 'addPause'; pause: Pause }
+  | { type: 'removePause'; index: number }
   /** Removes every relapse logged on one calendar day */
   | { type: 'clearRelapseDay'; id: string; key: string }
   | { type: 'save'; habit: Habit }
@@ -41,17 +49,54 @@ function reducer(s: AppState, a: Action): AppState {
       const habits = a.key < h.createdAt ? s.habits.map((x) => (x.id === a.id ? { ...x, createdAt: a.key } : x)) : s.habits
       return { ...s, habits, done: { ...s.done, [a.id]: map } }
     }
-    case 'relapse':
+    case 'relapse': {
+      const log = s.quit[a.id] ?? { relapses: [] }
+      const notes = { ...log.notes }
+      if (a.note && (a.note.triggers.length || a.note.text)) notes[a.at] = a.note
+      return { ...s, quit: { ...s.quit, [a.id]: { ...log, relapses: [...log.relapses, a.at].sort(), notes } } }
+    }
     case 'unrelapse': {
       const log = s.quit[a.id] ?? { relapses: [] }
-      const relapses = a.type === 'unrelapse' ? log.relapses.filter((x) => x !== a.at) : [...log.relapses, a.at].sort()
-      return { ...s, quit: { ...s.quit, [a.id]: { ...log, relapses } } }
+      const notes = { ...log.notes }
+      delete notes[a.at]
+      return { ...s, quit: { ...s.quit, [a.id]: { ...log, relapses: log.relapses.filter((x) => x !== a.at), notes } } }
+    }
+    case 'editRelapse': {
+      const log = s.quit[a.id] ?? { relapses: [] }
+      const notes = { ...log.notes }
+      delete notes[a.oldAt]
+      if (a.note && (a.note.triggers.length || a.note.text)) notes[a.at] = a.note
+      const relapses = [...log.relapses.filter((x) => x !== a.oldAt), a.at].sort()
+      return { ...s, quit: { ...s.quit, [a.id]: { ...log, relapses, notes } } }
     }
     case 'clearRelapseDay': {
       const log = s.quit[a.id] ?? { relapses: [] }
-      const relapses = log.relapses.filter((x) => toKey(new Date(x)) !== a.key)
-      return { ...s, quit: { ...s.quit, [a.id]: { ...log, relapses } } }
+      const gone = log.relapses.filter((x) => toKey(new Date(x)) === a.key)
+      const notes = { ...log.notes }
+      for (const g of gone) delete notes[g]
+      return { ...s, quit: { ...s.quit, [a.id]: { ...log, relapses: log.relapses.filter((x) => !gone.includes(x)), notes } } }
     }
+    case 'count': {
+      const h = s.habits.find((x) => x.id === a.id)
+      if (!h) return s
+      const target = Math.max(1, h.target ?? 1)
+      const n = Math.max(0, Math.min(target * 3, (s.counts[a.id]?.[a.key] ?? 0) + a.delta))
+      const counts = { ...(s.counts[a.id] ?? {}), [a.key]: n }
+      if (!n) delete counts[a.key]
+      const map = { ...(s.done[a.id] ?? {}) }
+      if (n >= target) map[a.key] = true
+      else delete map[a.key]
+      return { ...s, counts: { ...s.counts, [a.id]: counts }, done: { ...s.done, [a.id]: map } }
+    }
+    case 'reorder': {
+      const rank = new Map(a.ids.map((id, i) => [id, i]))
+      const habits = [...s.habits].sort((x, y) => (rank.get(x.id) ?? 1e9) - (rank.get(y.id) ?? 1e9))
+      return { ...s, habits }
+    }
+    case 'addPause':
+      return { ...s, pauses: [...s.pauses, a.pause].sort((x, y) => (x.from < y.from ? -1 : 1)) }
+    case 'removePause':
+      return { ...s, pauses: s.pauses.filter((_, i) => i !== a.index) }
     case 'save': {
       const exists = s.habits.some((h) => h.id === a.habit.id)
       const habits = exists ? s.habits.map((h) => (h.id === a.habit.id ? a.habit : h)) : [...s.habits, a.habit]
@@ -60,9 +105,11 @@ function reducer(s: AppState, a: Action): AppState {
     case 'delete': {
       const done = { ...s.done }
       const quit = { ...s.quit }
+      const counts = { ...s.counts }
       delete done[a.id]
       delete quit[a.id]
-      return { ...s, habits: s.habits.filter((h) => h.id !== a.id), done, quit }
+      delete counts[a.id]
+      return { ...s, habits: s.habits.filter((h) => h.id !== a.id), done, quit, counts }
     }
     case 'seenBadges':
       return { ...s, seenBadges: [...new Set([...s.seenBadges, ...a.ids])] }
@@ -76,7 +123,7 @@ export function isAppState(x: unknown): x is AppState {
   return !!s && Array.isArray(s.habits) && typeof s.done === 'object' && s.done !== null
 }
 
-export const emptyState = (): AppState => ({ version: 7, habits: [], done: {}, quit: {}, seenBadges: [] })
+export const emptyState = (): AppState => ({ version: 8, habits: [], done: {}, counts: {}, pauses: [], quit: {}, seenBadges: [] })
 
 /** Ids of the example habits earlier versions shipped with; version 6 removes them. */
 const EXAMPLE_IDS = new Set(['h-water', 'h-read', 'h-run', 'h-meditate', 'h-phone', 'q-smoke', 'q-scroll'])
@@ -105,10 +152,10 @@ export function normalize(s: AppState): AppState {
       delete quit[id]
     }
     // Badges the examples had earned are forgotten, so earning them for real celebrates again.
-    const summary = summarize({ version: 7, habits, done, quit, seenBadges: [] }, startOfDay(new Date()), new Date())
+    const summary = summarize({ version: 8, habits, done, counts: {}, pauses: [], quit, seenBadges: [] }, startOfDay(new Date()), new Date())
     seenBadges = BADGES.filter((b) => isUnlocked(b, summary)).map((b) => b.id)
   }
-  return { version: 7, habits, done, quit, seenBadges }
+  return { version: 8, habits, done, counts: s.counts ?? {}, pauses: s.pauses ?? [], quit, seenBadges }
 }
 
 function load(): AppState {

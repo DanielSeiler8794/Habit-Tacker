@@ -29,6 +29,7 @@ export function SavingsCard({ title, saved, habit }: Props) {
       label: `${habit.factorLabel || 'Produktives'} · 1 Std = ${habit.hourFactor} Std`,
     })
 
+  const goal = habit?.goalName && habit.goalEuro ? Math.min(1, euro / habit.goalEuro) : null
   if (!items.length) return null
   return (
     <section className="saved-card">
@@ -36,6 +37,17 @@ export function SavingsCard({ title, saved, habit }: Props) {
         <h3>{title}</h3>
         {both && <span className="saved-total">{formatEuro(euro)} gesamt</span>}
       </div>
+      {goal !== null && (
+        <div className="saved-goal">
+          <span>
+            {goal >= 1 ? 'Sparziel erreicht: ' : 'Sparziel: '}
+            <b>{habit!.goalName}</b> · {Math.round(goal * 100)} % von {formatEuro(habit!.goalEuro!)}
+          </span>
+          <span className="saved-goal-bar" aria-hidden>
+            <span style={{ width: `${goal * 100}%` }} />
+          </span>
+        </div>
+      )}
       <div className="saved-row">
         {items.map((it) => (
           <div key={it.label}>

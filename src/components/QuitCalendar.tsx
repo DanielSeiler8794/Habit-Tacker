@@ -10,14 +10,28 @@ interface Props {
   log: QuitLog | undefined
   now: Date
   onAddRelapse: (key: string) => void
+  onEditRelapse: (key: string) => void
   onClearRelapse: (key: string) => void
 }
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+
+/** "Rückfall um 21:30 · Stress, Gesellschaft" for the relapses logged on one day */
+function relapseLine(log: QuitLog | undefined, key: string) {
+  const items = (log?.relapses ?? []).filter((r) => toKey(new Date(r)) === key)
+  return items
+    .map((r) => {
+      const time = new Date(r).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+      const note = log?.notes?.[r]
+      const why = [...(note?.triggers ?? []), ...(note?.text ? [note.text] : [])].join(', ')
+      return `Rückfall um ${time}${why ? ` · ${why}` : ''}`
+    })
+    .join(' · ')
+}
 const monthName = (d: Date) => d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
 
 /** Month view of a bad habit: days held in blue, relapses in red. Tapping a day corrects it. */
-export function QuitCalendar({ habit, log, now, onAddRelapse, onClearRelapse }: Props) {
+export function QuitCalendar({ habit, log, now, onAddRelapse, onEditRelapse, onClearRelapse }: Props) {
   const today = startOfDay(now)
   const todayKey = toKey(today)
   const startKey = toKey(quitSince(habit))
@@ -114,12 +128,17 @@ export function QuitCalendar({ habit, log, now, onAddRelapse, onClearRelapse }: 
             <span>
               <b>{sel.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</b>
               <br />
-              {relapses.has(selected) ? 'Rückfall eingetragen' : selected === todayKey ? 'Läuft gerade' : 'Durchgezogen'}
+              {relapses.has(selected) ? relapseLine(log, selected) : selected === todayKey ? 'Läuft gerade' : 'Durchgezogen'}
             </span>
             {relapses.has(selected) ? (
-              <button className="btn btn-ghost btn-sm" onClick={() => onClearRelapse(selected)}>
-                Rückfall entfernen
-              </button>
+              <span className="cal-edit-btns">
+                <button className="btn btn-ghost btn-sm" onClick={() => onEditRelapse(selected)}>
+                  Bearbeiten
+                </button>
+                <button className="btn btn-danger btn-sm" onClick={() => onClearRelapse(selected)}>
+                  Entfernen
+                </button>
+              </span>
             ) : (
               <button className="btn btn-danger btn-sm" onClick={() => onAddRelapse(selected)}>
                 Rückfall eintragen

@@ -1,6 +1,6 @@
 import { addDays, fromKey, toKey } from './dates'
 import { isQuit, quitSince, relapseDays } from './quit'
-import { isScheduled } from './stats'
+import { isArchived, isPlannedOn, isWeekly, pausedCheck } from './stats'
 import type { AppState, Habit } from './types'
 
 export const CATEGORIES = [
@@ -36,11 +36,13 @@ export function categoryStats(state: AppState, today: Date): CategoryStats[] {
   const tKey = toKey(today)
   const relapses = new Map(state.habits.filter(isQuit).map((h) => [h.id, relapseDays(state.quit[h.id])]))
   const startKey = (h: Habit) => (isQuit(h) ? toKey(quitSince(h)) : h.createdAt)
-  const isPlanned = (h: Habit, d: Date, k: string) => startKey(h) <= k && (isQuit(h) || isScheduled(h, d))
+  const paused = pausedCheck(state.pauses)
+  const isPlanned = (h: Habit, d: Date, k: string) => (isQuit(h) ? startKey(h) <= k : isPlannedOn(h, d, paused))
   const isDone = (h: Habit, k: string) => (isQuit(h) ? !relapses.get(h.id)!.has(k) : !!state.done[h.id]?.[k])
 
   return CATEGORIES.map(({ id, label }) => {
-    const habits = state.habits.filter((h) => h.category === id)
+    // Weekly habits have no daily plan, archived ones are finished: neither shapes a category's days.
+    const habits = state.habits.filter((h) => h.category === id && !isWeekly(h) && !isArchived(h))
     const plannedNow = habits.filter((h) => isPlanned(h, today, tKey))
     const doneToday = plannedNow.filter((h) => isDone(h, tKey)).length
 

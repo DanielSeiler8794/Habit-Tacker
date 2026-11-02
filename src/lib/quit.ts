@@ -1,9 +1,8 @@
 import { addDays, fromKey, startOfDay, toKey } from './dates'
+import { milestonesFor, type Milestone } from './milestones'
 import type { Habit, QuitLog } from './types'
 
 export const DAY_MS = 86_400_000
-export const MILESTONES = [1, 3, 7, 14, 30, 60, 90, 180, 365]
-
 export const isQuit = (h: Habit) => h.kind === 'quit'
 export const quitSince = (h: Habit) => new Date(h.quitSince ?? `${h.createdAt}T00:00:00`)
 
@@ -46,16 +45,18 @@ export interface QuitStats {
   /** Finished calendar days since the start without a relapse; they count automatically */
   cleanDays: number
   saved: Savings
-  nextMilestone: number | null
+  nextMilestone: Milestone | null
   /** 0..1 from the last reached milestone to the next */
   milestoneProgress: number
 }
 
 /**
  * Nothing has to be ticked: every finished day without a relapse counts and saves
- * its per-day amount. The clean clock runs from quitSince and restarts at each relapse.
+ * its per-day amount. The clean clock runs from quitSince and restarts at each relapse;
+ * an archived habit stops counting at the moment it was archived.
  */
-export function quitStats(h: Habit, log: QuitLog | undefined, now: Date): QuitStats {
+export function quitStats(h: Habit, log: QuitLog | undefined, nowArg: Date): QuitStats {
+  const now = h.archivedAt ? new Date(Math.min(+nowArg, +new Date(h.archivedAt))) : nowArg
   const t = now.getTime()
   const start = quitSince(h)
   const rel = (log?.relapses ?? []).map(Date.parse).filter((x) => x >= start.getTime() && x <= t).sort((a, b) => a - b)
@@ -73,8 +74,9 @@ export function quitStats(h: Habit, log: QuitLog | undefined, now: Date): QuitSt
 
   const currentMs = Math.max(0, t - bounds[bounds.length - 1])
   const currentDays = Math.floor(currentMs / DAY_MS)
-  const next = MILESTONES.find((m) => m > currentDays) ?? null
-  const prev = [...MILESTONES].reverse().find((m) => m <= currentDays) ?? 0
+  const stones = milestonesFor(h)
+  const next = stones.find((m) => m.days > currentDays) ?? null
+  const prev = [...stones].reverse().find((m) => m.days <= currentDays)?.days ?? 0
 
   return {
     currentMs,
@@ -84,17 +86,69 @@ export function quitStats(h: Habit, log: QuitLog | undefined, now: Date): QuitSt
     cleanDays,
     saved: savingsFor(h, cleanDays),
     nextMilestone: next,
-    milestoneProgress: next ? (currentMs / DAY_MS - prev) / (next - prev) : 1,
+    milestoneProgress: next ? (currentMs / DAY_MS - prev) / (next.days - prev) : 1,
   }
 }
 
-/** When a relapse entered for a calendar day happened: now for today, otherwise that evening. */
+/** Suggested time for a relapse entered for a calendar day: now for today, otherwise 20:00 that day. */
 export function relapseTimeFor(h: Habit, key: string, now: Date) {
   if (key === toKey(now)) return now
   const d = fromKey(key)
   d.setHours(20, 0, 0, 0)
   const start = quitSince(h)
   return d < start ? new Date(start.getTime() + 60_000) : d
+}
+
+export const TRIGGERS = ['Stress', 'Langeweile', 'Gesellschaft', 'Alkohol', 'Müdigkeit', 'Frust', 'Belohnung', 'Gewohnheit', 'Sonstiges']
+
+const WEEKDAY_LONG = ['sonntags', 'montags', 'dienstags', 'mittwochs', 'donnerstags', 'freitags', 'samstags']
+const DAYTIMES: [string, number, number][] = [
+  ['morgens', 5, 11],
+  ['mittags', 11, 14],
+  ['nachmittags', 14, 18],
+  ['abends', 18, 23],
+  ['nachts', 23, 29],
+]
+const daytimeOf = (hour: number) => DAYTIMES.find(([, a, b]) => (hour < 5 ? hour + 24 : hour) >= a && (hour < 5 ? hour + 24 : hour) < b)![0]
+
+export interface RelapsePatterns {
+  total: number
+  /** Mon..Sun counts */
+  byWeekday: number[]
+  byDaytime: { label: string; n: number }[]
+  triggers: { label: string; n: number }[]
+  /** "Die meisten Rückfälle: freitags, abends, bei Stress", or null with too little data */
+  summary: string | null
+}
+
+/** Finds when and why relapses tend to happen, from their times and notes. */
+export function relapsePatterns(log: QuitLog | undefined): RelapsePatterns {
+  const list = (log?.relapses ?? []).map((iso) => ({ d: new Date(iso), note: log?.notes?.[iso] }))
+  const byWeekday = [0, 0, 0, 0, 0, 0, 0]
+  const daytime = new Map<string, number>()
+  const triggers = new Map<string, number>()
+  for (const { d, note } of list) {
+    byWeekday[(d.getDay() + 6) % 7]++
+    const dt = daytimeOf(d.getHours())
+    daytime.set(dt, (daytime.get(dt) ?? 0) + 1)
+    for (const t of note?.triggers ?? []) triggers.set(t, (triggers.get(t) ?? 0) + 1)
+  }
+  const sorted = (m: Map<string, number>) => [...m].map(([label, n]) => ({ label, n })).sort((a, b) => b.n - a.n)
+  const byDaytime = sorted(daytime)
+  const trig = sorted(triggers)
+
+  let summary: string | null = null
+  if (list.length >= 2) {
+    const parts: string[] = []
+    const maxDay = Math.max(...byWeekday)
+    const weekend = byWeekday[4] + byWeekday[5] + byWeekday[6]
+    if (weekend / list.length >= 0.6 && weekend >= 2) parts.push('rund ums Wochenende')
+    else if (maxDay >= 2 && byWeekday.filter((n) => n === maxDay).length === 1) parts.push(WEEKDAY_LONG[(byWeekday.indexOf(maxDay) + 1) % 7])
+    if (byDaytime[0] && byDaytime[0].n >= 2 && byDaytime[0].n / list.length >= 0.5) parts.push(byDaytime[0].label)
+    if (trig[0] && trig[0].n >= 2) parts.push(`bei ${trig[0].label}`)
+    if (parts.length) summary = `Die meisten Rückfälle: ${parts.join(', ')}.`
+  }
+  return { total: list.length, byWeekday, byDaytime, triggers: trig, summary }
 }
 
 export function formatClean(ms: number) {
